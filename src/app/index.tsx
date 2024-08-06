@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
-import { Text, View, TextInput } from "react-native";
+import { Text, View, TextInput, Platform, GestureResponderEvent } from "react-native";
 import * as ScreenOrientation from "expo-screen-orientation"
 import LetterButton from "@/components/letterButton";
-import { getDBConnection, insertWordIntoDB } from "@/database/database";
-import { SQLiteDatabase } from "react-native-sqlite-storage";
+import { openDatabase, SQLiteDatabase } from "react-native-sqlite-storage";
+import { ToastAndroid, Alert } from "react-native";
+import { displayToast } from "@/utils/toast";
+import * as SQLite from 'expo-sqlite'
+import DataBaseHandler from "@/database/database";
+import { GestureHandlerEvent } from "react-native-reanimated/lib/typescript/reanimated2/hook";
+
 
 export default function App() {
+  const [sugestions, setSugestions] = useState(['Sugestão'])
 
-  let db: SQLiteDatabase
+  const db = SQLite.openDatabaseSync('noVerbalApp')
+  let dbHandler: DataBaseHandler
 
-  getDBConnection().then((result) => {
-    db = result
-  } )
 
   const [word, setWord] = useState('')
   const keyboard = [
@@ -24,6 +28,11 @@ export default function App() {
   useEffect(() => {
     lockOrientation();
   }, [])
+  
+  useEffect(() => {
+    dbHandler = new DataBaseHandler(db)
+  }
+  )
 
   const lockOrientation = async () => {
     await ScreenOrientation.lockAsync(
@@ -31,13 +40,19 @@ export default function App() {
     )
   }
 
-  const letterButtonPress = (c: string) => {
-    if (c === '-') {
-      setWord(word.slice(0, -1))
-    } else if (c === '+') {
-      insertWordIntoDB(db, word)
+  const letterButtonPress = (character: string) => {
+    if (character === '-') {
+      setWord(word.slice(0, -1))  
+    } else if (character === '+') {
+      if (word != ''){
+        dbHandler.insertWordIntoDb(word)
+        setWord('')
+        setSugestions(['Sugestões'])
+      } else {
+        displayToast('Por favor, informe uma palavra')
+      }
     } else {
-      setWord(word + c)
+      setWord(word + character)
     }
   }
 
@@ -55,7 +70,12 @@ export default function App() {
                 return <LetterButton
                 key={character}
                 character={character}
-                onPress={() => letterButtonPress(character)}
+                onPress={() => {
+                  letterButtonPress(character)
+                  const querySugetions = dbHandler.getSimilarWords(word + character)
+                  setSugestions(querySugetions)
+                  console.debug(querySugetions)
+                }}
                 >
                 </LetterButton>
               })
@@ -75,13 +95,20 @@ export default function App() {
           />
         </View>
         <View 
-          className="flex flex-row items-start border rounded my-4 p-4 h-1/2 bg-slate-300"
+          className="flex flex-col items-start border rounded my-4 p-4 h-1/2 bg-slate-300"
         >
-          <Text
-            className="text-lg"
-          >
-            Sugestões:
-          </Text>
+          {sugestions.map((sugestion, index) => {
+            return <Text
+            key={index}
+             className="text-lg"
+            >
+             {sugestion}
+            </Text>
+          }
+          
+
+          )}
+         
         </View>
       </View>
     </View>

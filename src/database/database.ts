@@ -1,46 +1,64 @@
-import { enablePromise, openDatabase, SQLiteDatabase } from "react-native-sqlite-storage"
+import { displayToast } from "@/utils/toast"
+import * as SQLite from "expo-sqlite"
 
-export const getDBConnection = async () => {
-  return await openDatabase({
-    name: 'noVerbalApp.db',
-    location: 'default'
-  })
- }
+export default class DataBaseHandler {
+  db: SQLite.SQLiteDatabase
+  
+  constructor(db: SQLite.SQLiteDatabase) {
+    try{
+     this.db = db
+     this.db.execSync(`
+      CREATE TABLE IF NOT EXISTS words (
+      _id INTEGER PRIMARY KEY AUTOINCREMENT,
+      words TEXT UNIQUE NOT NULL,
+      timesUsed INTEGER DEFAULT 0
+     );
+    `)
+    // this.db.execSync('drop table words')
+      displayToast('Sucesso ao iniciar o banco de dados')
+    } catch (error) {
+      displayToast(String(error))
+      console.error(error)
+    }
+  }
 
-export const createWordsTable = async (db: SQLiteDatabase) => {
-  const query = `CREATE TABLE IF NOT EXISTS words (
-    word TEXT UNIQUE NOT NULL,
-    timesUsed INT NOT NULL DEFAULT 0
-  );`
 
-  await db.executeSql(query)
-}
-
-export const getSimilarWords = async (db: SQLiteDatabase, word: string) => {
-  const words: Array<String> = []
-  const query = `
-    SELECT word FROM words 
-      WHERE word LIKE %${word.toUpperCase()}%
-      ORDER BY timesUsed DESC;`
-  const queryResults = await db.executeSql(query)
-  queryResults.forEach(result => {
-    words.push(String(result).toUpperCase())
-  })
-  return words
-}
-
-export const insertWordIntoDB = async (db: SQLiteDatabase, word: string) => {
-  const query = `INSERT INTO words (word, itemsUsed) values ${word.toUpperCase()}`
-  try {
-    await db.executeSql(query)
-  } catch {
-    const query = `
-      UPDATE words 
+  insertWordIntoDb(word: string) {
+    try {
+      this.db.execSync(`
+        INSERT INTO words (words, timesUsed)
+        VALUES ('${word}', 1)
+      `)
+      displayToast('Palavra inserida no banco de dados')
+    } catch {
+      this.db.execSync(`
+        UPDATE words
         SET timesUsed = timesUsed + 1
-        WHERE word = ${word}`
-    await db.executeSql(query)
+        WHERE words = '${word}'
+      `)
+      displayToast('Palavra atualizada no banco de dados')
+    }
+  }
+
+  getSimilarWords(word: string): Array<string> {
+    try {
+      console.debug(word)
+      const query = `
+        SELECT words FROM words
+        WHERE words LIKE '%${word}%'`
+      const similarWords = this.db.getEachSync(query)
+      var words = new Array<string>
+      for (var w of similarWords) {
+        // TODO fix this comparison but keep TypeScript safe
+        if (typeof(w) == "object" && w != null && 'words' in w && typeof(w.words) == 'string'){
+          words.push(w.words)
+        }
+      }
+      return words
+    } catch (error) {
+      console.error(error)
+      displayToast('Houve um erro recuperando as palavras')
+    }
+    return ['']
   }
 }
-
-
-enablePromise(true)
